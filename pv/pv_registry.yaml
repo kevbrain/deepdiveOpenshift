@@ -1,0 +1,12 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: image-registry-storage
+spec:
+  capacity:
+    storage: 100Gi
+  nfs:
+    server: nfsserver.ocp4.its4u.local
+    path: /var/share/registry
+  accessModes:
+    - ReadWriteMany

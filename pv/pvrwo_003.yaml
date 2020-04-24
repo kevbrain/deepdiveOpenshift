@@ -1,0 +1,12 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pvrwo003
+spec:
+  capacity:
+    storage: 1Gi
+  nfs:
+    server: nfsserver.ocp4.its4u.local
+    path: /var/share/pvrwo_003
+  accessModes:
+    - ReadWriteOnce

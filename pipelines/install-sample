@@ -1,0 +1,25 @@
+#!/bin/bash
+echo '#### clean environment ####'
+sh scripts/pipelines/clean
+echo '#### wait 40s until projects was deleted ###'
+sleep 40 
+echo '#### create projects ###'
+oc new-project pipelines-tutorial
+oc new-project dev
+oc new-project acceptance
+oc new-project production
+echo '#### create ressources ###'
+oc create -f scripts/pipelines/pipelines.yaml -n pipelines-tutorial
+oc create -f scripts/pipelines/deployment_app_vote-dev.yaml  -n dev
+oc create -f scripts/pipelines/deployment_app_vote-acceptance.yaml  -n acceptance
+oc create -f scripts/pipelines/deployment_app_vote-production.yaml  -n production
+oc set triggers dc ui --from-image=ui:production --containers=ui -n production
+oc set triggers dc ui --from-image=ui:acceptance --containers=ui -n acceptance
+oc set triggers dc ui --from-image=ui:latest --containers=ui -n dev
+oc set triggers dc api --from-image=api:latest --containers=api -n dev
+oc set triggers dc api --from-image=api:acceptance --containers=api -n acceptance
+oc set triggers dc api --from-image=api:production --containers=api -n production
+echo '#### add role to pipeline service account ####'
+oc adm policy add-role-to-user admin system:serviceaccount:pipelines-tutorial:pipeline -n dev
+oc adm policy add-role-to-user admin system:serviceaccount:pipelines-tutorial:pipeline -n acceptance
+oc adm policy add-role-to-user admin system:serviceaccount:pipelines-tutorial:pipeline -n production

@@ -1,0 +1,22 @@
+export KUBECONFIG=/root/ocp4/auth/kubeconfig
+oc get clusterversion
+oc get nodes
+oc get clusteroperators
+
+oc adm groups new developers
+oc adm groups add-users developers dev1 dev2
+oc new-project bil
+oc policy add-role-to-group edit developers
+
+oc adm node-logs -u kubelet worker01.ocp4.its4u.local | tail
+oc adm node-logs worker01.ocp4.its4u.local | tail
+
+oc label node worker01.ocp4.its4u.local tier=bil
+oc get nodes -l tier=bil
+oc create --save-config -f loadtest.yaml
+oc logs deployment/loadtest
+oc expose deployment/loadtest --port 80 --target-port 8080
+oc expose svc loadtest
+curl http://loadtest-bil.apps.ocp4.its4u.local/api/loadtest/v1/healthz
+oc autoscale deployment/loadtest --name loadtest  --min 2 --max 10 --cpu-percent 70
+curl -X GET  http://loadtest-bil.apps.ocp4.its4u.local/api/loadtest/v1/cpu/3

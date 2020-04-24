@@ -1,0 +1,292 @@
+apiVersion: v1
+items:
+- apiVersion: tekton.dev/v1alpha1
+  kind: Pipeline
+  metadata:
+    name: build-and-deploy
+    namespace: pipelines-tutorial
+  spec:
+    resources:
+    - name: api-repo
+      type: git
+    - name: api-image
+      type: image
+    - name: ui-repo
+      type: git
+    - name: ui-image
+      type: image
+    tasks:
+    - name: build-api
+      params:
+      - name: TLSVERIFY
+        value: "false"
+      resources:
+        inputs:
+        - name: source
+          resource: api-repo
+        outputs:
+        - name: image
+          resource: api-image
+      taskRef:
+        kind: ClusterTask
+        name: buildah
+    - name: apply-api-manifests
+      resources:
+        inputs:
+        - name: source
+          resource: api-repo
+      runAfter:
+      - build-api
+      taskRef:
+        kind: Task
+        name: apply-manifests
+    - name: update-api-image
+      params:
+      - name: deployment
+        value: api
+      resources:
+        inputs:
+        - name: image
+          resource: api-image
+      runAfter:
+      - apply-api-manifests
+      taskRef:
+        kind: Task
+        name: update-deployment
+    - name: build-ui
+      params:
+      - name: TLSVERIFY
+        value: "false"
+      resources:
+        inputs:
+        - name: source
+          resource: ui-repo
+        outputs:
+        - name: image
+          resource: ui-image
+      taskRef:
+        kind: ClusterTask
+        name: s2i-python-3
+    - name: apply-ui-manifests
+      resources:
+        inputs:
+        - name: source
+          resource: ui-repo
+      runAfter:
+      - build-ui
+      - update-api-image
+      taskRef:
+        kind: Task
+        name: apply-manifests
+    - name: update-ui-image
+      params:
+      - name: deployment
+        value: ui
+      resources:
+        inputs:
+        - name: image
+          resource: ui-image
+      runAfter:
+      - apply-ui-manifests
+      taskRef:
+        kind: Task
+        name: update-deployment
+- apiVersion: tekton.dev/v1alpha1
+  kind: Pipeline
+  metadata:
+    name: mep-production
+    namespace: pipelines-tutorial
+  spec:
+    tasks:
+    - name: promote-image
+      taskRef:
+        kind: Task
+        name: mep-production
+- apiVersion: tekton.dev/v1alpha1
+  kind: Pipeline
+  metadata:
+    name: promote-to-apps-acceptance
+    namespace: pipelines-tutorial
+  spec:
+    tasks:
+    - name: promote-image
+      taskRef:
+        kind: Task
+        name: promotevoteapptoacceptance
+- apiVersion: tekton.dev/v1alpha1
+  kind: Pipeline
+  metadata:
+    name: promote-to-apps-dev
+    namespace: pipelines-tutorial
+  spec:
+    tasks:
+    - name: promote-image
+      taskRef:
+        kind: Task
+        name: promotevoteapptodev
+- apiVersion: tekton.dev/v1alpha1
+  kind: PipelineResource
+  metadata:
+    name: api-image
+    namespace: pipelines-tutorial
+  spec:
+    params:
+    - name: tag
+      value: ui:latest
+    - name: url
+      value: image-registry.openshift-image-registry.svc:5000/pipelines-tutorial/api:latest
+    type: image
+- apiVersion: tekton.dev/v1alpha1
+  kind: PipelineResource
+  metadata:
+    name: api-repo
+    namespace: pipelines-tutorial
+  spec:
+    params:
+    - name: url
+      value: https://github.com/kevbrain/Openshift-pipeline-vote-api.git
+    type: git
+- apiVersion: tekton.dev/v1alpha1
+  kind: PipelineResource
+  metadata:
+    name: ui-image
+    namespace: pipelines-tutorial
+  spec:
+    params:
+    - name: tag
+      value: ui:latest
+    - name: url
+      value: image-registry.openshift-image-registry.svc:5000/pipelines-tutorial/ui:latest
+    type: image
+- apiVersion: tekton.dev/v1alpha1
+  kind: PipelineResource
+  metadata:
+    name: ui-repo
+    namespace: pipelines-tutorial
+  spec:
+    params:
+    - name: url
+      value: https://github.com/kevbrain/Openshift-pipeline-vote-ui.git
+    type: git
+- apiVersion: tekton.dev/v1alpha1
+  kind: Task
+  metadata:
+    name: apply-manifests
+    namespace: pipelines-tutorial
+  spec:
+    inputs:
+      params:
+      - default: k8s
+        description: The directory in source that contains yaml manifests
+        name: manifest_dir
+        type: string
+      resources:
+      - name: source
+        type: git
+    steps:
+    - args:
+      - |-
+        echo Applying manifests in $(inputs.params.manifest_dir) directory
+        oc apply -f $(inputs.params.manifest_dir)
+        echo -----------------------------------
+      command:
+      - /bin/bash
+      - -c
+      image: quay.io/openshift/origin-cli:latest
+      name: apply
+      resources: {}
+      workingDir: /workspace/source
+- apiVersion: tekton.dev/v1alpha1
+  kind: Task
+  metadata:
+    name: mep-production
+    namespace: pipelines-tutorial
+  spec:
+    steps:
+    - args:
+      - |-
+        echo promote app to production
+        oc whoami
+        oc tag pipelines-tutorial/api:latest api:production -n production
+        oc tag pipelines-tutorial/ui:latest ui:production -n production
+        echo -----------------------------------
+      command:
+      - /bin/bash
+      - -c
+      image: quay.io/openshift/origin-cli:latest
+      name: apply
+      resources: {}
+      workingDir: /workspace/source
+- apiVersion: tekton.dev/v1alpha1
+  kind: Task
+  metadata:
+    name: promotevoteapptoacceptance
+    namespace: pipelines-tutorial
+  spec:
+    steps:
+    - args:
+      - "echo promote app to acceptance\noc whoami          \noc tag pipelines-tutorial/api:latest
+        api:acceptance -n acceptance\noc tag pipelines-tutorial/ui:latest ui:acceptance
+        -n acceptance\necho -----------------------------------"
+      command:
+      - /bin/bash
+      - -c
+      image: quay.io/openshift/origin-cli:latest
+      name: apply
+      resources: {}
+      workingDir: /workspace/source
+- apiVersion: tekton.dev/v1alpha1
+  kind: Task
+  metadata:
+    name: promotevoteapptodev
+    namespace: pipelines-tutorial
+  spec:
+    steps:
+    - args:
+      - |-
+        echo promote app to dev
+        oc whoami
+        oc project dev
+        oc tag pipelines-tutorial/api:latest api:latest
+        oc tag pipelines-tutorial/ui:latest ui:latest
+        echo -----------------------------------
+      command:
+      - /bin/bash
+      - -c
+      image: quay.io/openshift/origin-cli:latest
+      name: apply
+      resources: {}
+      workingDir: /workspace/source
+- apiVersion: tekton.dev/v1alpha1
+  kind: Task
+  metadata:
+    name: update-deployment
+    namespace: pipelines-tutorial
+  spec:
+    inputs:
+      params:
+      - description: The name of the deployment patch the image
+        name: deployment
+        type: string
+      resources:
+      - name: image
+        type: image
+    steps:
+    - args:
+      - |-
+        oc patch deployment $(inputs.params.deployment) --patch='{"spec":{"template":{"spec":{
+          "containers":[{
+            "name": "$(inputs.params.deployment)",
+            "image":"$(inputs.resources.image.url)"
+          }]
+        }}}}'
+      command:
+      - /bin/bash
+      - -c
+      image: quay.io/openshift/origin-cli:latest
+      name: patch
+      resources: {}
+kind: List
+metadata:
+  resourceVersion: ""
+  selfLink: ""

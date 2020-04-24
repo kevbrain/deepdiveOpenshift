@@ -1,0 +1,12 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pvrwm002
+spec:
+  capacity:
+    storage: 1Gi
+  nfs:
+    server: nfsserver.ocp4.its4u.local
+    path: /var/share/pvrwm_002
+  accessModes:
+    - ReadWriteMany

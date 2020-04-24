@@ -1,0 +1,6 @@
+#!/bin/bash
+oc delete project pipelines-tutorial
+oc delete project dev
+oc delete project acceptance
+oc delete project production
+
